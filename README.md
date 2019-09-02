@@ -29,7 +29,7 @@ $ git clone https://github.com/MehmetAzizYirik/EQGen.git
 ```
 ## Compiling
 
-To compile HMD, Apache Maven and Java 1.8 (or later) are required.
+To compile EQGen, Apache Maven and Java 1.8 (or later) are required.
 ```
 EQGen/$ mvn package
 ```
