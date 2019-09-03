@@ -25,6 +25,7 @@ SOFTWARE.
 
 package EQGen;
 
+import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -35,7 +36,6 @@ import java.util.Map;
 import java.text.DecimalFormat;
 
 import org.apache.commons.cli.*;
-import org.openscience.cdk.depict.DepictionGenerator;
 import org.openscience.cdk.exception.CDKException;
 import org.openscience.cdk.graph.ConnectivityChecker;
 import org.openscience.cdk.interfaces.IAtom;
@@ -43,7 +43,11 @@ import org.openscience.cdk.interfaces.IAtomContainer;
 import org.openscience.cdk.interfaces.IBond;
 import org.openscience.cdk.interfaces.IBond.Order;
 import org.openscience.cdk.io.SDFWriter;
+import org.openscience.cdk.io.iterator.IteratingSDFReader;
 import org.openscience.cdk.silent.Atom;
+import org.openscience.cdk.depict.DepictionGenerator;
+import org.openscience.cdk.smiles.SmilesGenerator;
+import org.openscience.cdk.silent.SilentChemObjectBuilder;
 import org.openscience.cdk.tools.SaturationChecker;
 import org.openscience.cdk.tools.manipulator.BondManipulator;
 
@@ -76,7 +80,7 @@ public class Generator {
 	}
 	
 	//This function takes a string of atom-implicit hydrogen information to build an atomcontainer
-	public static IAtomContainer build(String mol) {
+	public static IAtomContainer build(String mol, String fragments) throws IOException {
 		IAtomContainer atomcontainer = new org.openscience.cdk.silent.AtomContainer();
 		List<String> symbols = new ArrayList<String>();
 	    List<Integer> hydrogens = new ArrayList<Integer>();
@@ -91,7 +95,65 @@ public class Generator {
 	        atomcontainer.addAtom(new Atom(symbols.get(i)));
 	        atomcontainer.getAtom(i).setImplicitHydrogenCount(hydrogens.get(i));
 	    }
+	    
+	    setFlagID(atomcontainer);
+	    addFragments(atomcontainer,fragments);
 	    return atomcontainer;
+	}
+	
+	public static void setFlag(IAtomContainer ac) {
+		for(IAtom atom: ac.atoms()) {
+			atom.setFlag(1, false);
+		}
+	}
+	
+	public static void setFlagID(IAtomContainer ac){
+		for(int i=0;i<ac.getAtomCount();i++) {
+			IAtom atom= ac.getAtom(i);
+			atom.setFlag(1, false);
+			atom.setID("no:"+i);
+		}
+	}
+	
+	public static int[] getEqualAtoms(IAtomContainer acon, IAtomContainer fragment) {
+		int[] equal= new int[fragment.getAtomCount()];
+		for(IAtom fAtom : fragment.atoms()){
+			for(IAtom atom : acon.atoms()){
+				if(fAtom.getSymbol().equals(atom.getSymbol())&& fAtom.getImplicitHydrogenCount()==atom.getImplicitHydrogenCount() && (!fAtom.getFlag(1))&&(!atom.getFlag(1))){
+					fAtom.setID(atom.getID());
+					equal[fragment.indexOf(fAtom)]=acon.indexOf(atom);
+					fAtom.setFlag(1, true);
+					atom.setFlag(1, true);
+					break;
+				}
+			}
+		}
+		return equal;
+	}
+	
+	public static void addFragments(IAtomContainer acontainer, String fpath) throws IOException{
+		IteratingSDFReader fragments = new IteratingSDFReader(new FileReader(fpath),SilentChemObjectBuilder.getInstance());
+		while (fragments.hasNext()) {
+			IAtomContainer fragment=fragments.next();
+			setFlag(acontainer);
+			List<IAtom> done= new ArrayList<IAtom>();
+			int[] equals= getEqualAtoms(acontainer,fragment);
+			for(int i=0;i<equals.length;i++) {
+				List<IAtom> neighbors = fragment.getConnectedAtomsList(fragment.getAtom(i));
+				for(IAtom neig: neighbors){
+					if(!done.contains(neig)){
+						for(int j=0;j<acontainer.getAtomCount();j++){
+							if(neig.getID().equals(acontainer.getAtom(j).getID())){
+								done.add(fragment.getAtom(i));
+								acontainer.addBond(equals[i], j,fragment.getBond(fragment.getAtom(i), neig).getOrder());
+							}
+						}
+					}
+				}
+				
+			}
+		}
+		fragments.close();	
 	}
 	
 	//Saturation checker, checking the maximum number of connected bonds of atoms.
@@ -511,18 +573,9 @@ public class Generator {
 	
 	public static void main(String[] args) throws CloneNotSupportedException, CDKException, IOException  {		
 		// TODO Auto-generated method stub
-		
-		/**IAtomContainer ac= build("C3C3C3C2C1");
-		ac.addBond(0, 3, Order.SINGLE);
-		ac.addBond(3, 4, Order.SINGLE);
-		ac.addBond(4, 1, Order.SINGLE);
-		//ac.addBond(4, 2, Order.SINGLE);
-		
-		//List<IAtom> list= ac.getConnectedAtomsList(ac.getAtom(4));
-		ListMultimap<String, Integer> ec=ecenumlist(ac);
-		System.out.println(ec);
-		System.out.println(lastClass(4,ac,ec));**/
-		Generator gen = null;
+		IAtomContainer ac=build("C2C2C1C2C2C2C1C2C2","C:\\Users\\mehme\\Desktop\\FRAG.sdf");
+		depict(ac,"C:\\Users\\mehme\\Desktop\\ac.png");
+		/**Generator gen = null;
 		String[] args1= {"-i","C3C3C2C2C1C1","-v","-d","C:\\Users\\mehme\\Desktop\\"};
 		try {
 			gen = new Generator();
@@ -531,7 +584,7 @@ public class Generator {
 		} catch (Exception e) {
 			// We don't do anything here. Apache CLI will print a usage text.
 			if (Generator.verbose) e.getCause(); 
-		}
+		}**/
 
 	}
 }
