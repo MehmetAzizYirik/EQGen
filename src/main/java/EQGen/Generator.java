@@ -30,44 +30,27 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.text.DecimalFormat;
 
-import org.apache.commons.cli.CommandLine;
-import org.apache.commons.cli.CommandLineParser;
-import org.apache.commons.cli.DefaultParser;
-import org.apache.commons.cli.HelpFormatter;
-import org.apache.commons.cli.Option;
-import org.apache.commons.cli.Options;
-import org.apache.commons.cli.ParseException;
-import org.openscience.cdk.silent.Atom;
+import org.apache.commons.cli.*;
 import org.openscience.cdk.depict.DepictionGenerator;
 import org.openscience.cdk.exception.CDKException;
 import org.openscience.cdk.graph.ConnectivityChecker;
-import org.openscience.cdk.graph.GraphUtil;
-import org.openscience.cdk.graph.invariant.Canon;
-import org.openscience.cdk.inchi.InChIGeneratorFactory;
 import org.openscience.cdk.interfaces.IAtom;
 import org.openscience.cdk.interfaces.IAtomContainer;
 import org.openscience.cdk.interfaces.IBond;
 import org.openscience.cdk.interfaces.IBond.Order;
 import org.openscience.cdk.io.SDFWriter;
+import org.openscience.cdk.silent.Atom;
 import org.openscience.cdk.tools.SaturationChecker;
 import org.openscience.cdk.tools.manipulator.BondManipulator;
 
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.MultimapBuilder;
 
-import HMD.BufferedInputStream;
-import HMD.ChemFile;
-import HMD.FileInputStream;
-import HMD.Ggen;
-import HMD.IChemSequence;
-import HMD.InputStream;
-import HMD.MDLV2000Reader;
+
 
 public class Generator {
 	public static SaturationChecker saturation;
@@ -120,6 +103,15 @@ public class Generator {
 		}
 	}
 	
+	//Summation of the connected bond orders.
+	public static int ordsum(IAtomContainer mol, int i){
+		int count=0;
+		for(IBond bond: mol.getConnectedBondsList(mol.getAtom(i))){
+			count=count+bond.getOrder().numeric();
+		}
+		return count;
+	}
+		
 	public static final Comparator<String> ASC_ORDER = new Comparator<String>() {
 	    public int compare(String e1, String e2) { 
 	        return -e2.compareTo(e1);
@@ -139,13 +131,12 @@ public class Generator {
 		return classes;
 	}
 	
-	// Molecule depiction Ggen
+	// Molecule depiction Generator
 	public static void depict(IAtomContainer mol, String path) throws CloneNotSupportedException, CDKException, IOException{
 		DepictionGenerator depict = new DepictionGenerator();
 		depict.withCarbonSymbols().withSize(1000, 1000).withZoom(4).depict(mol).writeTo(path);
 	}
 	
-	public static int counts=0;
 	/**
 	 * This function extends the molecule until the chosen index, atom, is saturated.
 	 */
@@ -230,8 +221,6 @@ public class Generator {
 			List<IAtomContainer> atomSatList = new ArrayList<IAtomContainer>();
 			atomSatList=atomSat(mol,ind, atomSatList);
 			for(IAtomContainer ac: atomSatList) {
-				ko++;
-				depict(ac,"C:\\Users\\mehme\\Desktop\\DupDen\\acaba"+ko+".png");
 				//if(!subSaturation(ac)) { 
 					satList=classSat(ac,cls2,satList);
 				//}
@@ -278,13 +267,11 @@ public class Generator {
 		if(saturation.allSaturated(mol)) {
 			list.add(mol);
 			outFile.write(mol);
-			depict(mol,"C:\\Users\\mehme\\Desktop\\SatLDupSat\\"+count+".png");
 		}else {
 			ListMultimap<String, Integer> m=ecenumlist(mol);
 			for(String k:m.keySet()) {
 				List<Integer> l= m.get(k);
 				List<IAtomContainer> kel= new ArrayList<IAtomContainer>();
-				count++;
 				kel=classSat(mol,l,kel);
 				for(IAtomContainer a: kel) {
 					if(!subSaturation(a)) {
@@ -351,7 +338,7 @@ public class Generator {
 	}
 	
 	public static String lastClass(int index, IAtomContainer mol,ListMultimap<String, Integer> ec) {
-		List<IAtom> cons= mol.getConnectedAtomsList(mol.getAtom(index)); //Connected olmaz bu direktconnect eden en son eklenen deil. 
+		List<IAtom> cons= mol.getConnectedAtomsList(mol.getAtom(index)); 
 		String out="";
 		if(cons.size()==0) {
 			out+=findClass(ec,index);
@@ -398,37 +385,11 @@ public class Generator {
 				if(index!=target && satcheck(mol,index) && satcheck(mol,target)){ 
 					bondadder(mol,index,target);
 					IAtomContainer mol2=mol.clone();
-					say++;
-					depict(mol2,"C:\\Users\\mehme\\Desktop\\DupDen\\in"+say+"heh"+count+".png");
 					mols.add(mol2);
 					removeBond(mol,index,target);
 				}
 			//}
 		}
-						/**}else {
-						for(Integer i:l) {
-							if(index!=i && satcheck(mol,index) && satcheck(mol,i)){ 
-								bondadder(mol,index,i);
-								IAtomContainer mol2=mol.clone();
-								say++;
-								depict(mol2,"C:\\Users\\mehme\\Desktop\\deneme\\ic"+say+"heh"+count+".png");
-								mols.add(mol2);
-								removeBond(mol,index,i);
-							}
-						}
-					}
-				}
-			}
-			int target=targetatom(ec,key,index);
-			if(index!=target && satcheck(mol,index) && satcheck(mol,target)){ 
-				bondadder(mol,index,target);
-				IAtomContainer mol2=mol.clone();
-				say++;
-				depict(mol2,"C:\\Users\\mehme\\Desktop\\deneme\\ic"+say+".png");
-				mols.add(mol2);
-				removeBond(mol,index,target);
-			}
-		}**/
 		return mols;
 	}
 	
@@ -442,8 +403,6 @@ public class Generator {
 					if(index!=i && satcheck(mol,index) && satcheck(mol,i)){ 
 						bondadder(mol,index,i);
 						IAtomContainer mol2=mol.clone();
-						say++;
-						depict(mol2,"C:\\Users\\mehme\\Desktop\\DupDen\\in"+say+"heh"+count+".png");
 						mols.add(mol2);
 						removeBond(mol,index,i);
 					}
@@ -459,21 +418,7 @@ public class Generator {
 		}else {
 			mols=atomextAll(mol,ec,index,mols);
 		}
-		/**for(String key:ec.keySet()) {
-			//if(key.compareTo(lastClass(index,mol,ec))>=0) {
-				List<Integer> l=ec.get(key);
-				for(Integer i:l) {
-					if(index!=i && satcheck(mol,index) && satcheck(mol,i)){ 
-						bondadder(mol,index,i);
-						IAtomContainer mol2=mol.clone();
-						say++;
-						//depict(mol2,"C:\\Users\\mehme\\Desktop\\DupDen\\ic"+say+"heh"+count+".png");
-						mols.add(mol2);
-						removeBond(mol,index,i);
-					}
-				}
-			//}
-		}**/	
+		
 		return mols;
 	}
 	
@@ -486,25 +431,31 @@ public class Generator {
 		}
 	}
 	
-	public static void buildFromFragments(String fragments) {
-			InputStream ins = new BufferedInputStream(new FileInputStream(fragments));
-			MDLV2000Reader reader = new MDLV2000Reader(ins);
-			ChemFile fileContents = (ChemFile)reader.read(new ChemFile());		        
-			IChemSequence sequence = fileContents.getChemSequence(0);
-
-			for (int i=0; i<sequence.getChemModelCount(); i++) {
-				IAtomContainer frag = sequence.getChemModel(i).getMoleculeSet().getAtomContainer(0);
-
-				try {
-					acontainer = MolManipulator.buildFromFragment(acontainer,frag);
-				} catch (CloneNotSupportedException e1) {
-					// TODO Auto-generated catch block
-					e1.printStackTrace();
-				}
-			}
-			acontainer = MolManipulator.getcanonical(acontainer, fragments);		
+	/**
+	 * Function is for the initialisation of the inputs and recording the duration time.
+	 */
+	public static void HMD(String molinfo, String filedir) throws CloneNotSupportedException, CDKException, IOException {
+		long startTime = System.nanoTime(); //Recording the duration time.
+		SDFWriter outFile = new SDFWriter(new FileWriter(filedir+"output.sdf"));
+		List<IAtomContainer> mols= new ArrayList<IAtomContainer>();
+		IAtomContainer mol=build(molinfo);
+		if(verbose) {
+			System.out.println("Input molecule is built and its image is stored in the given directory.");
+			//depict(mol,filedir+"inputmolecule.png");
+		}
+        //mols.add(mol);
+        if(verbose) System.out.println("Start generating structures ...");
+        run(mol,outFile,mols);
+        //genall(mols,ecindices(mol),outFile);
+        long endTime = System.nanoTime()- startTime;
+        double seconds = (double) endTime / 1000000000.0;
+		DecimalFormat d = new DecimalFormat(".###");
+        if(verbose) {
+        	//System.out.println("Number of generated structures:"+" "+uniquecheck.size());
+        	System.out.println("Duration:"+" "+d.format(seconds)); //Format is second
+        }
+        outFile.close();	
 	}
-	
 	
 	private void parseArgs(String[] args) throws ParseException
 	{
@@ -512,10 +463,10 @@ public class Generator {
 		CommandLineParser parser = new DefaultParser();
 		try {
 			CommandLine cmd = parser.parse(options, args);
-			Ggen.molinfo = cmd.getOptionValue("molecularinfo");
-			Ggen.filedir = cmd.getOptionValue("filedir");
+			Generator.molinfo = cmd.getOptionValue("molecularinfo");
+			Generator.filedir = cmd.getOptionValue("filedir");
 			
-			if (cmd.hasOption("verbose")) Ggen.verbose = true;
+			if (cmd.hasOption("verbose")) Generator.verbose = true;
 		
 		} catch (ParseException e) {
 			// TODO Auto-generated catch block
@@ -571,15 +522,15 @@ public class Generator {
 		ListMultimap<String, Integer> ec=ecenumlist(ac);
 		System.out.println(ec);
 		System.out.println(lastClass(4,ac,ec));**/
-		Ggen gen = null;
+		Generator gen = null;
 		String[] args1= {"-i","C3C3C2C2C1C1","-v","-d","C:\\Users\\mehme\\Desktop\\"};
 		try {
-			gen = new Ggen();
+			gen = new Generator();
 			gen.parseArgs(args1);
-			Ggen.HMD(Ggen.molinfo, Ggen.filedir);
+			Generator.HMD(Generator.molinfo, Generator.filedir);
 		} catch (Exception e) {
 			// We don't do anything here. Apache CLI will print a usage text.
-			if (Ggen.verbose) e.getCause(); 
+			if (Generator.verbose) e.getCause(); 
 		}
 
 	}
