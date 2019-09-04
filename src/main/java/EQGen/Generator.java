@@ -29,8 +29,10 @@ import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.text.DecimalFormat;
@@ -38,6 +40,8 @@ import java.text.DecimalFormat;
 import org.apache.commons.cli.*;
 import org.openscience.cdk.exception.CDKException;
 import org.openscience.cdk.graph.ConnectivityChecker;
+import org.openscience.cdk.group.Permutation;
+import org.openscience.cdk.group.PermutationGroup;
 import org.openscience.cdk.interfaces.IAtom;
 import org.openscience.cdk.interfaces.IAtomContainer;
 import org.openscience.cdk.interfaces.IBond;
@@ -60,6 +64,7 @@ public class Generator {
 	public static SaturationChecker saturation;
 	public static ConnectivityChecker conCheck;
 	public static boolean verbose = false;
+	static String fragments = null;
 	static String filedir = null;
 	static String molinfo= null;
 	public static Map<String, Integer> valences; 
@@ -174,15 +179,21 @@ public class Generator {
 		return count;
 	}
 		
-	public static final Comparator<String> ASC_ORDER = new Comparator<String>() {
+	public static final Comparator<String> ASC_ORDERS = new Comparator<String>() {
 	    public int compare(String e1, String e2) { 
+	        return -e2.compareTo(e1);
+	    }
+	};
+	
+	public static final Comparator<Integer> ASC_ORDERI = new Comparator<Integer>() {
+	    public int compare(Integer e1, Integer e2) { 
 	        return -e2.compareTo(e1);
 	    }
 	};
 	
 	//The equivalent classes of molecules are ordered and enumerated in ascending order based on their open values and implicit hydrogens; as described in the paper. 
 	public static ListMultimap<String,Integer> ecenumlist(IAtomContainer acontainer) throws CloneNotSupportedException, CDKException, IOException {
-		ListMultimap<String,Integer> classes = MultimapBuilder.treeKeys(ASC_ORDER).arrayListValues().build();
+		ListMultimap<String,Integer> classes = MultimapBuilder.treeKeys(ASC_ORDERS).arrayListValues().build();
 		//long[] sym=canonsym(acontainer);
 		for(int i=0; i<acontainer.getAtomCount();i++){
 			//if(satcheck(acontainer, i)==true){	
@@ -492,15 +503,123 @@ public class Generator {
 			BondManipulator.decreaseBondOrder(bond);
 		}
 	}
+	 public static boolean inList(HashSet<HashSet<ArrayList<Integer>>> list, HashSet<ArrayList<Integer>> arr) {
+		 boolean check= false;
+		 for(HashSet<ArrayList<Integer>> l: list) {
+			 if(l.equals(arr)) {
+				 check=true;
+				 break;
+			 }
+		 }
+		 return check;
+	 }
+	 
+	public static boolean inTheList(ArrayList<int[]> list, int[] arr) {
+		boolean check= false;
+		for(int i=0;i<list.size();i++) {
+			if(Arrays.equals(list.get(i), arr)) {
+				check=true;
+				break;
+			}
+		}
+		return check;
+	 }
+	 
+	public static boolean inTheList(HashSet<ArrayList<Integer>> list, ArrayList<Integer> arr) {
+		 boolean check= false;
+		 for(ArrayList<Integer> l:list) {
+			 if(l.equals(arr)) {
+				 check=true;
+				 break;
+			 }
+		 }
+		 return check;
+	 }
+	
+	 public static boolean ascCheck(Permutation perm) {
+		 boolean check=true;
+		 for(int i=0;i<(perm.size()/2)-1;i++) {
+			 if(perm.get(i)>perm.get(i+1)) {
+				 check=false;
+				 break;
+			 }
+		 }
+		 return check;
+	 }
+	 
+	 public static int[] getTabloid(Permutation perm) {
+		 int[] arr= new int[perm.size()/2];
+	     for(int i=0;i<(perm.size()/2);i++){
+		     arr[i]=perm.get(i);
+		 }
+		 return arr;
+	 }
+	 
+	/**
+	  * Generating list of unique orbits for the list of truncated tabloids
+	  * and the acting group.
+	  * 
+	  * @param truncated truncated tabloids for the acting group
+	  * @param group a permutation group 
+	  * @return list of unique orbits
+	  */
+	 
+	 public static HashSet<HashSet<ArrayList<Integer>>> fundamentalLemma(PermutationGroup group, PermutationGroup group2, ArrayList<Permutation> group3) {
+		 HashSet<HashSet<ArrayList<Integer>>> orbits= new HashSet<HashSet<ArrayList<Integer>>>(); 
+		 ArrayList<int[]> truncated= truncatedTabloids(group, group2);
+		 for(int j=0;j<truncated.size();j++) {
+		    HashSet<ArrayList<Integer>> orbit= new HashSet<ArrayList<Integer>>();
+		    for(Permutation perm: group3) {
+		    	ArrayList<Integer> l= new ArrayList<Integer>();
+		    	for(int k=0;k<truncated.get(j).length;k++) {
+		    		l.add(perm.get(truncated.get(j)[k]));
+		    	}
+		    	l.sort(ASC_ORDERI);
+		    	if(!inTheList(orbit,l)) {
+		    		orbit.add(l);
+		    	}
+		    }
+		    System.out.println(orbit);
+		    if(!inList(orbits,orbit)) {
+		    	orbits.add(orbit);
+		    }
+		  }
+		 return orbits;
+	 }
+	 
+	 /**
+	  * Implementation of Orbit Fundamental Lemma. Molgen Book Example page 168.
+	  * @param group a permutation group
+	  * @param group2 a permutation group
+	  * @return truncated tabloids for the orbits.
+	  */
+	 
+	 public static  ArrayList<int[]> truncatedTabloids(PermutationGroup group, PermutationGroup group2) {
+		 ArrayList<int[]> arrl= new ArrayList<int[]>();
+	     //ArrayList<Permutation> lp= new ArrayList<Permutation>();
+	     for(Permutation permutation: group.all()) {
+	    	 for(Permutation permutation2:group2.all()) {
+	    		 Permutation p=permutation.multiply(permutation2);
+	    		 if(ascCheck(permutation)) {
+	    			 int[] h= getTabloid(permutation);
+	    			 if(!inTheList(arrl,h)) {
+	    				 arrl.add(h);
+	    				 //lp.add(permutation);
+	    			 } 
+	    		 }
+	    	 } 
+	     }
+	     return arrl;
+	 }
 	
 	/**
 	 * Function is for the initialisation of the inputs and recording the duration time.
 	 */
-	public static void HMD(String molinfo, String filedir) throws CloneNotSupportedException, CDKException, IOException {
+	public static void HMD(String molinfo, String filedir, String fragments) throws CloneNotSupportedException, CDKException, IOException {
 		long startTime = System.nanoTime(); //Recording the duration time.
 		SDFWriter outFile = new SDFWriter(new FileWriter(filedir+"output.sdf"));
 		List<IAtomContainer> mols= new ArrayList<IAtomContainer>();
-		IAtomContainer mol=build(molinfo);
+		IAtomContainer mol=build(molinfo,fragments);
 		if(verbose) {
 			System.out.println("Input molecule is built and its image is stored in the given directory.");
 			//depict(mol,filedir+"inputmolecule.png");
@@ -527,7 +646,7 @@ public class Generator {
 			CommandLine cmd = parser.parse(options, args);
 			Generator.molinfo = cmd.getOptionValue("molecularinfo");
 			Generator.filedir = cmd.getOptionValue("filedir");
-			
+			Generator.fragments= cmd.getOptionValue("fragments");
 			if (cmd.hasOption("verbose")) Generator.verbose = true;
 		
 		} catch (ParseException e) {
@@ -539,8 +658,8 @@ public class Generator {
 					+ "For example 'C3C3C3' means three carbon atoms each of which has three implicit hydrogens."
 					+ "Besides this molecular information, the directory is needed to be specified for the output"
 					+ "file. \n\n";
-			String footer = "\nPlease report issues at https://github.com/MehmetAzizYirik/HMD";
-			formatter.printHelp( "java -jar HMD.jar", header, options, footer, true );
+			String footer = "\nPlease report issues at https://github.com/MehmetAzizYirik/EQGen";
+			formatter.printHelp( "java -jar EQGen.jar", header, options, footer, true );
 			throw new ParseException("Problem parsing command line");
 		}
 	}
@@ -568,23 +687,28 @@ public class Generator {
 			     .desc("Creates and store the output sdf file in the directory (required)")
 			     .build();
 		options.addOption(filedir);
+		Option fragments = Option.builder("f")
+			     .required(false)
+			     .hasArg()
+			     .longOpt("fragments")
+			     .desc("The list of substructures from experimental data")
+			     .build();
+		options.addOption(fragments);
 		return options;
 	}
 	
 	public static void main(String[] args) throws CloneNotSupportedException, CDKException, IOException  {		
 		// TODO Auto-generated method stub
-		IAtomContainer ac=build("C2C2C1C2C2C2C1C2C2","C:\\Users\\mehme\\Desktop\\FRAG.sdf");
-		depict(ac,"C:\\Users\\mehme\\Desktop\\ac.png");
-		/**Generator gen = null;
+		Generator gen = null;
 		String[] args1= {"-i","C3C3C2C2C1C1","-v","-d","C:\\Users\\mehme\\Desktop\\"};
 		try {
 			gen = new Generator();
 			gen.parseArgs(args1);
-			Generator.HMD(Generator.molinfo, Generator.filedir);
+			Generator.HMD(Generator.molinfo, Generator.filedir, Generator.fragments);
 		} catch (Exception e) {
 			// We don't do anything here. Apache CLI will print a usage text.
 			if (Generator.verbose) e.getCause(); 
-		}**/
+		}
 
 	}
 }
