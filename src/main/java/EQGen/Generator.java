@@ -30,9 +30,13 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -80,9 +84,9 @@ public class Generator {
 		valences.put("S", 6);
 		valences.put("P", 5);
 		valences.put("F", 1);
-		valences.put("I", 7);
-		valences.put("Cl", 5);
-		valences.put("Br", 5);
+		valences.put("I", 1);
+		valences.put("Cl", 1);
+		valences.put("Br", 1);
 		valences.put("H", 1);
 	}
 	
@@ -237,6 +241,65 @@ public class Generator {
 			}
 		}
 		return list;
+	 }
+	 
+	 /**
+	  * To count occurences of atom types in an atom container.
+	  * @param mol atom container
+	  * @return HashMap of atom occurunces.
+	  */
+	 
+	 public static HashMap<String,Integer> atomsWithValence1(IAtomContainer mol){
+		 HashMap<String, Integer> atomCounts = new HashMap<String, Integer>(); 
+		 for(IAtom atom: mol.atoms()) {
+			 String symbol = atom.getSymbol();
+			 if(valences.get(symbol)==1) {
+				 if(atomCounts.containsKey(symbol)) {
+					 atomCounts.put(symbol, atomCounts.get(symbol)+1);
+				 }else {
+					 atomCounts.put(symbol, 1);
+				 }
+			 }
+		 }
+		 return atomCounts; 
+	 }
+	 
+	 /**
+	  * To sort a Hashmap based on the entries. 
+	  * @param atomCounts HashMap<String,Integer>
+	  * @return HashMap<String, Integer>
+	  */
+	 
+	 public static HashMap<String, Integer> sortByValue(HashMap<String, Integer> atomCounts) { 
+	     List<Map.Entry<String, Integer> > map2list = new LinkedList<Map.Entry<String, Integer>>(atomCounts.entrySet()); 
+	     Collections.sort(map2list, new Comparator<Map.Entry<String, Integer> >() { 
+	    	 public int compare(Map.Entry<String, Integer> o1, Map.Entry<String, Integer> o2){ 
+	    		 return (o1.getValue()).compareTo(o2.getValue()); 
+	         } 
+	     }); 
+	          
+	     HashMap<String, Integer> newMap = new LinkedHashMap<String, Integer>(); 
+	     for (Map.Entry<String, Integer> entry : map2list) { 
+	    	 newMap.put(entry.getKey(), entry.getValue()); 
+	     } 
+	     return newMap; 
+	 } 
+	 
+	 public static List<int[]> truncatedTabloids(int[] entries){
+		 //Collection<Integer> entries=atomCounts.values();
+		 List<int[]> tabloids= new ArrayList<int[]>();
+		 int[] array= new int[0];
+		 for(int i=0;i<entries.length-1;i++) { 
+			 tabloids= truncatedTabloids(entries[i],array,tabloids);
+		 }
+		 
+		 //TODO: I should create a new truncatedTabloids function. 
+		 /**First take a list of numbers from 0 to n. When you move to the next tabloid
+		  * for the next isotope, first remove the ints of the tabloids from the list.
+		  * Then continue adding the remaning one in ascending order for the occurunce of the
+		  * isotope type.
+		  */
+		 return tabloids;
 	 }
 	 
 	/**
@@ -873,7 +936,7 @@ public class Generator {
 	}
 	
 	public static void main(String[] args) throws CloneNotSupportedException, CDKException, IOException  {		
-		Generator gen = null;
+		/**Generator gen = null;
 		String[] args1= {"-i","C3C3C2C2C1C1","-v","-d","C:\\Users\\mehme\\Desktop\\" };
 		try {
 			gen = new Generator();
@@ -881,11 +944,14 @@ public class Generator {
 			Generator.HMD(Generator.molinfo, Generator.filedir);
 		} catch (Exception e) {
 			if (Generator.verbose) e.getCause(); 
-		}
-		/**List<int[]> list= new ArrayList<int[]>();
+		}**/
+		List<int[]> list= new ArrayList<int[]>();
 		int[] array= new int[0];
-		//truncatedTab(4,array,list);
-		ArrayList<Permutation> R= new ArrayList<Permutation>();
+		truncatedTabloids(4,array,list);
+		for(int[] a: list) {
+			System.out.println(Arrays.toString(a));
+		}
+		/**ArrayList<Permutation> R= new ArrayList<Permutation>();
 	    Permutation perm1 = new Permutation(3,2,1,0,7,6,5,4);
 	    Permutation perm2 = new Permutation(0,1,2,3,4,5,6,7);
 	    Permutation perm3 = new Permutation(4,5,6,7,0,1,2,3);
