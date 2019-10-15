@@ -129,6 +129,33 @@ public class Generator {
 	 }
 	 
 	/**
+	 * Sum all array entries.
+	 * @param array int array
+	 * @return
+	 */
+	
+	public static int sum(int[] array) {
+		int sum=0;
+		for(int i=0;i<array.length;i++) {
+			sum=sum+array[i];
+		}
+		return sum;
+	}
+	
+	/**
+	 * Sum array entries until the given index
+	 * @param array int array
+	 * @return
+	 */
+	
+	public static int sum(int[] array, int index) {
+		int sum=0;
+		for(int i=0;i<=index;i++) {
+			sum=sum+array[i];
+		}
+		return sum;
+	}
+	/**
 	 * Checks whether the list is in the list of the lists or not.
 	 * @param list List of ArrayList<Integer>
 	 * @param arr list of integers
@@ -182,7 +209,7 @@ public class Generator {
 		 Set<Set<ArrayList<Integer>>> orbits= new HashSet<Set<ArrayList<Integer>>>(); 
 		 List<int[]> list= new ArrayList<int[]>();
 		 int[] array= new int[0];
-		 List<int[]> truncated= truncatedTabloids(trun,array,list);
+		 List<int[]> truncated= truncatedTabloidsInitial(trun,array,list);
 		 for(int j=0;j<truncated.size();j++) {
 			Set<ArrayList<Integer>> orbit= new HashSet<ArrayList<Integer>>();
 		    for(Permutation perm: group3) {
@@ -225,26 +252,62 @@ public class Generator {
 	  * @return list of int arrays, tabs.
 	  */
 	 
-	 public static List<int[]> truncatedTabloids(int number, int[] array, List<int[]> list) {
+	 public static List<int[]> truncatedTabloidsInitial(int number, int[] array, List<int[]> list) {
 		int size= array.length;
 		if(size==number) {
 			list.add(array);
 		}else {
 			if(size==0) {
 				for(int i=0; i<=number;i++) {
-					truncatedTabloids(number,addElement(array,i),list);
+					truncatedTabloidsInitial(number,addElement(array,i),list);
 				}
 			}else {
 				for(int i=array[size-1]+1; i<=number+size;i++) {
-					truncatedTabloids(number,addElement(array,i),list);
+					truncatedTabloidsInitial(number,addElement(array,i),list);
 				}
 			}
 		}
 		return list;
 	 }
 	 
+	 public static List<int[]> truncatedTabloids(int number, int[] array, List<int[]> list, List<Integer> entries) {
+		 int size= array.length;
+		 if(size==number) {
+			 list.add(array);
+			 System.out.println(Arrays.toString(array));
+		 }else {
+			for(Integer i:entries) {
+				entries=updateList(entries,i);
+				truncatedTabloids(number,addElement(array,i),list,entries);
+			}
+		 }
+		 return list;
+	 }
+	 
+	 
+	 public static List<Integer> inputList(int[] array, int number){
+		 List<Integer> intList= new ArrayList<Integer>();
+		 for(int i=1;i<=number;i++) {
+			 if(!entryCheck(array,i)) {
+				 intList.add(i);
+			 }
+		 }
+		 return intList;
+	 }
+	 
+	 public static boolean entryCheck(int[] array, int entry) {
+		 boolean check=false;
+		 for(int i=0;i<array.length;i++) {
+			 if(array[i]==entry) {
+				 check=true;
+				 break;
+			 }
+		 }
+		 return check;
+	 }
+	 
 	 /**
-	  * To count occurences of atom types in an atom container.
+	  * or the atoms with valence 1, To count occurences of atom types in an atom container.
 	  * @param mol atom container
 	  * @return HashMap of atom occurunces.
 	  */
@@ -286,21 +349,25 @@ public class Generator {
 	 } 
 	 
 	 public static List<int[]> truncatedTabloids(int[] entries){
-		 //Collection<Integer> entries=atomCounts.values();
 		 List<int[]> tabloids= new ArrayList<int[]>();
-		 int[] array= new int[0];
-		 for(int i=0;i<entries.length-1;i++) { 
-			 tabloids= truncatedTabloids(entries[i],array,tabloids);
+		 for(int i=0;i<entries.length-1;i++) {
+			 if(i==0) {
+				 int[] array= new int[0];
+				 tabloids = truncatedTabloidsInitial(entries[0],array,tabloids);
+			 }else {
+				 tabloids = truncatedTabloids(tabloids,sum(entries,i),sum(entries)); 
+			 }
 		 }
-		 
-		 //TODO: I should create a new truncatedTabloids function. 
-		 /**First take a list of numbers from 0 to n. When you move to the next tabloid
-		  * for the next isotope, first remove the ints of the tabloids from the list.
-		  * Then continue adding the remaning one in ascending order for the occurunce of the
-		  * isotope type.
-		  */
 		 return tabloids;
 	 }
+	 
+	public static List<int[]> truncatedTabloids(List<int[]> tabloids,int number, int total){
+		List<int[]> tabloids2= new ArrayList<int[]>();
+		for(int[] tab: tabloids) {
+			truncatedTabloids(number,tab,tabloids2,inputList(tab,total));
+		}
+		return tabloids2;
+	}
 	 
 	/**
 	 * Atom container functions
@@ -936,6 +1003,11 @@ public class Generator {
 	}
 	
 	public static void main(String[] args) throws CloneNotSupportedException, CDKException, IOException  {		
+		int[] entries= new int [3];
+		entries[0]=4;
+		entries[1]=2;
+		entries[2]=3;
+		truncatedTabloids(entries);
 		/**Generator gen = null;
 		String[] args1= {"-i","C3C3C2C2C1C1","-v","-d","C:\\Users\\mehme\\Desktop\\" };
 		try {
@@ -944,14 +1016,14 @@ public class Generator {
 			Generator.HMD(Generator.molinfo, Generator.filedir);
 		} catch (Exception e) {
 			if (Generator.verbose) e.getCause(); 
-		}**/
+		}
 		List<int[]> list= new ArrayList<int[]>();
 		int[] array= new int[0];
 		truncatedTabloids(4,array,list);
 		for(int[] a: list) {
 			System.out.println(Arrays.toString(a));
 		}
-		/**ArrayList<Permutation> R= new ArrayList<Permutation>();
+		ArrayList<Permutation> R= new ArrayList<Permutation>();
 	    Permutation perm1 = new Permutation(3,2,1,0,7,6,5,4);
 	    Permutation perm2 = new Permutation(0,1,2,3,4,5,6,7);
 	    Permutation perm3 = new Permutation(4,5,6,7,0,1,2,3);
