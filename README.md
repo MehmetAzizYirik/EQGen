@@ -17,6 +17,9 @@ classSat()  : It saturates all the atom in the class until the saturation.
 atomsat()   : Saturating atom in a molecule.
 run()       : The function first calculates equivalence classes; then saturates each classes.
 ```
+## Download jar File
+
+The jar file is given here: [EQGen.jar] (https://github.com/MehmetAzizYirik/EQGen/blob/master/EQGen.jar).
 
 ## Download Source Code
 
