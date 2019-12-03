@@ -1152,7 +1152,7 @@ public class Generator {
 	public static void main(String[] args) throws CloneNotSupportedException, CDKException, IOException  {		
 		Generator gen = null;
 		//O1CC1C1C1C1CO1 C6H6O2 Example formula
-		//String[] args1= {"-i","C1C1C1C1C1C1","-v","-d","C:\\Users\\mehme\\Desktop\\output\\ben" };
+		//String[] args1 = {"-i","C1C1C1C1C1C1","-v","-d","C:\\Users\\mehme\\Desktop\\output\\ben" };
 		try {
 			gen = new Generator();
 			gen.parseArgs(args);
