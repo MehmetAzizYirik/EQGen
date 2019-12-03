@@ -30,7 +30,6 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -45,15 +44,20 @@ import java.text.DecimalFormat;
 import org.apache.commons.cli.*;
 import org.openscience.cdk.exception.CDKException;
 import org.openscience.cdk.graph.ConnectivityChecker;
+import org.openscience.cdk.graph.GraphUtil;
+import org.openscience.cdk.graph.invariant.Canon;
+import org.openscience.cdk.group.AtomContainerDiscretePartitionRefiner;
+import org.openscience.cdk.group.Partition;
+import org.openscience.cdk.group.PartitionRefinement;
 import org.openscience.cdk.group.Permutation;
 import org.openscience.cdk.group.PermutationGroup;
+import org.openscience.cdk.inchi.InChIGeneratorFactory;
 import org.openscience.cdk.interfaces.IAtom;
 import org.openscience.cdk.interfaces.IAtomContainer;
 import org.openscience.cdk.interfaces.IBond;
 import org.openscience.cdk.interfaces.IBond.Order;
 import org.openscience.cdk.io.SDFWriter;
 import org.openscience.cdk.io.iterator.IteratingSDFReader;
-import org.openscience.cdk.signature.MoleculeSignature;
 import org.openscience.cdk.silent.Atom;
 import org.openscience.cdk.depict.DepictionGenerator;
 import org.openscience.cdk.silent.SilentChemObjectBuilder;
@@ -64,11 +68,14 @@ import com.google.common.collect.ListMultimap;
 import com.google.common.collect.MultimapBuilder;
 
 
-
 public class Generator {
-	public static Set<String> signatureCheck = new HashSet<String>();
+	public static Set<String> inchiCheck = new HashSet<String>();
+	public static Set<String> classInchiCheck= new HashSet<String>();
+	public static Set<String> atomSatInchiCheck= new HashSet<String>();
+	public static Set<String> atomsat = new HashSet<String>();
 	public static SaturationChecker saturation;
 	public static ConnectivityChecker conCheck;
+	public static ArrayList<Integer> hydrogens= new ArrayList<Integer>();
 	public static boolean verbose = false;
 	static String fragments = null;
 	static String filedir = null;
@@ -126,8 +133,8 @@ public class Generator {
 			}
 		}
 		return check;
-	 }
-	 
+	}
+	
 	/**
 	 * Sum all array entries.
 	 * @param array int array
@@ -188,6 +195,44 @@ public class Generator {
 		listNew.remove((Integer)index);
 		return listNew;
 	}
+	
+	/**
+	 * To check in a list of integers, what the open sites in a given molecule.
+	 * @param mol
+	 * @param list
+	 * @return
+	 * @throws CloneNotSupportedException
+	 * @throws CDKException
+	 * @throws IOException
+	 */
+	
+	public static List<Integer> openSites(IAtomContainer mol, List<Integer> list) throws CloneNotSupportedException, CDKException, IOException{
+		for(Integer i: list) {
+			if(!saturationChecker(mol,i)) {
+				List<Integer> newList= updateList(list,i);
+				list=newList;
+			}
+		}
+		return list;
+	}
+	
+	/**
+	 * Molecule Depiction
+	 * @param mol atom container
+	 * @param path directory path for png file.
+	 * @throws CloneNotSupportedException
+	 * @throws CDKException
+	 * @throws IOException
+	 */
+	
+	public static void depict(IAtomContainer mol, String path) throws CloneNotSupportedException, CDKException, IOException{
+		DepictionGenerator depict = new DepictionGenerator();
+		depict.withCarbonSymbols().withSize(1000, 1000).withZoom(4).depict(mol).writeTo(path);
+	}
+	
+	/**
+	 * *******************************************************************************
+	 */
 	
 	/**
 	 * Permutation Group Functions - Fundamental Lemma of Orbits
@@ -274,7 +319,6 @@ public class Generator {
 		 int size= array.length;
 		 if(size==number) {
 			 list.add(array);
-			 System.out.println(Arrays.toString(array));
 		 }else {
 			for(Integer i:entries) {
 				entries=updateList(entries,i);
@@ -307,7 +351,7 @@ public class Generator {
 	 }
 	 
 	 /**
-	  * or the atoms with valence 1, To count occurences of atom types in an atom container.
+	  * For the atoms with valence 1, To count occurences of atom types in an atom container.
 	  * @param mol atom container
 	  * @return HashMap of atom occurunces.
 	  */
@@ -370,6 +414,48 @@ public class Generator {
 	}
 	 
 	/**
+	 * New equivalence classes method based on molecule automorphism group 
+	 */
+	
+	public static PermutationGroup getAutomorphismGroup(IAtomContainer ac) {
+		AtomContainerDiscretePartitionRefiner refiner = PartitionRefinement.forAtoms().create();
+		return refiner.getAutomorphismGroup(ac);
+	}
+	
+	public static Partition getAutomorphismPartition(IAtomContainer molecule) {
+		AtomContainerDiscretePartitionRefiner refiner = PartitionRefinement.forAtoms().create();
+		return refiner.getAutomorphismPartition(molecule);
+	}
+	
+	/**
+	 * Get the orbits, the equivalence classes of the atoms. 
+	 */
+	
+	public static Set<Set<Integer>> getOrbits(IAtomContainer ac, ArrayList<Integer> heteroIndices){
+		PermutationGroup group=getAutomorphismGroup(ac);
+		Set<Set<Integer>> orbits= new HashSet<Set<Integer>>();
+		for(Integer i: heteroIndices) {
+			orbits.add(getOrbit(group,i));
+		}
+		return orbits;
+	}
+	
+	public static Set<Integer> getOrbit(PermutationGroup group, Integer i){
+		Set<Integer> orbit = new HashSet<Integer>();
+		for(Permutation perm: group.all()) {
+			int n= perm.get(i);
+			if(!orbit.contains(n)) {
+				orbit.add(n);
+			}
+		}
+		return orbit;
+	}
+	
+	/**
+	 * *******************************************************************************
+	 */
+	
+	/**
 	 * Atom container functions
 	 */
 	
@@ -400,6 +486,24 @@ public class Generator {
 	    //setFlagID(atomcontainer);
 	    //addFragments(atomcontainer,fragments);
 	    return atomcontainer;
+	}
+	
+	/**
+	 * In an atomcontainer counting hydrogens.
+	 * @param ac IAtomContainer
+	 * @param index atom index
+	 * @return
+	 */
+	
+	public static int countHydrogen(IAtomContainer ac, int index) {
+		int count=0;
+		List<IAtom> list=ac.getConnectedAtomsList(ac.getAtom(index));
+		for(IAtom atom: list) {
+			if(atom.getSymbol().equals("H")) {
+				count++;
+			}
+		}
+		return count;
 	}
 	
 	/**
@@ -508,44 +612,103 @@ public class Generator {
 	 * @throws IOException
 	 */
 	
-	public static ListMultimap<String,Integer> equivalenceClasses(IAtomContainer acontainer) throws CloneNotSupportedException, CDKException, IOException {
-		ListMultimap<String,Integer> classes = MultimapBuilder.treeKeys(ASC_ORDERS).arrayListValues().build();
-		for(int i=0; i<acontainer.getAtomCount();i++){
-			if(saturationChecker(acontainer, i)==true){	
-				classes.put(acontainer.getAtom(i).getSymbol()+(valences.get(acontainer.getAtom(i).getSymbol())-acontainer.getAtom(i).getImplicitHydrogenCount()), i); // TODO: Valence value and the implicit info are fixed. No need to check again and again.
+	public static ListMultimap<String,Integer> equivalenceClass(IAtomContainer molecule) throws CloneNotSupportedException, CDKException, IOException {
+		ListMultimap<String,Integer> equivalenceClasses = MultimapBuilder.treeKeys(ASC_ORDERS).arrayListValues().build();
+		long[] symmetryClasses=canonSymmetry(molecule);
+		for(int index=0; index<molecule.getAtomCount();index++){
+			if(saturationChecker(molecule, index)==true){	
+				String label = molecule.getAtom(index).getSymbol()+openSiteCounter(molecule, index)+Long.valueOf(symmetryClasses[index]).intValue();
+				equivalenceClasses.put(label, index); //The open sites and the symmetry values are used for labelling.
 			}
 		}		
-		return classes;
+		return equivalenceClasses;
 	}
 	
 	/**
-	 * Getting molecular signatures
-	 * @param ac atom container
-	 * @return string SIGNATURE
+	 * Number of neighbors an atom has in a atomcontainer
+	 * @param molecule IAtomContainer
+	 * @param atom 
+	 * @return
 	 */
 	
-	public static String moleculeSignature(IAtomContainer ac) {
-		MoleculeSignature molSig = new MoleculeSignature(ac);			
-		return molSig.toCanonicalString();
+	public static int neighbors(IAtomContainer molecule, IAtom atom) {
+		return molecule.getConnectedAtomsList(atom).size();
 	}
 	
 	/**
-	 * Molecule Depiction
+	 * Generating symmetry classes of atoms with Canon class.
+	 * @param ac atom container
+	 * @return long[] list of atom equivalence classes
+	 */
+	
+	public static long[] canonSymmetry(IAtomContainer ac) {
+		 int[][] g = GraphUtil.toAdjList(ac);
+		 return Canon.symmetry(ac, g);
+	}
+	
+	/**
+	 * InChI Generator from CDK.
+	 * @param molecule IAtomContainer
+	 * @return
+	 * @throws CDKException
+	 */
+	
+	public static String inchiGeneration(IAtomContainer molecule) throws CDKException {
+		String inchi = InChIGeneratorFactory.getInstance().getInChIGenerator(molecule).getInchi();	
+		return inchi;
+	}
+	
+	/**
+	 * Count open sites of an atom in a molecule.
 	 * @param mol atom container
-	 * @param path directory path for png file.
+	 * @param i atom index
+	 * @return int number of open sites
 	 * @throws CloneNotSupportedException
 	 * @throws CDKException
 	 * @throws IOException
 	 */
 	
-	public static void depict(IAtomContainer mol, String path) throws CloneNotSupportedException, CDKException, IOException{
-		DepictionGenerator depict = new DepictionGenerator();
-		depict.withCarbonSymbols().withSize(1000, 1000).withZoom(4).depict(mol).writeTo(path);
+	public static int openSiteCounter(IAtomContainer mol, int i)throws CloneNotSupportedException, CDKException, IOException{
+		int open=0;
+		if(mol.getAtom(i).getImplicitHydrogenCount()==null) {
+			open += valences.get(mol.getAtom(i).getSymbol()).intValue()- orderSum(mol,i);
+		}else {
+			open += valences.get(mol.getAtom(i).getSymbol()).intValue()- orderSum(mol,i) - mol.getAtom(i).getImplicitHydrogenCount(); 
+		}
+		//int open = valences.get(mol.getAtom(i).getSymbol()).intValue() - orderSum(mol,i) - ; 
+		return open;
+	}
+	
+	/**
+	 * Sum all connected bond orders for an atom.
+	 * @param mol atom container 
+	 * @param i an atom index
+	 * @return int sumation of bond orders.
+	 */
+	
+	public static int orderSum(IAtomContainer mol, int i){
+		int count=0;
+		for(IBond bond: mol.getConnectedBondsList(mol.getAtom(i))){
+			count=count+bond.getOrder().numeric();
+		}
+		return count;
 	}
 	
 	/**
 	 * Saturation Checkers.
 	 */
+	
+	/**
+	 * Saturation checker for a atomcontainer
+	 * @param mol
+	 * @return
+	 * @throws CDKException
+	 */
+	
+	public static boolean saturation(IAtomContainer mol) throws CDKException {
+		saturation= new SaturationChecker();
+		return saturation.allSaturated(mol);
+	}
 	
 	/**
 	 * In the atom container, checking an atom is saturated or not.
@@ -558,10 +721,18 @@ public class Generator {
 	 */
 	
 	public static boolean saturationChecker(IAtomContainer mol, int i) throws CloneNotSupportedException, CDKException, IOException{
-		if ((mol.getAtom(i).getImplicitHydrogenCount()+getTotalBondOrder(mol,i))>= (int)valences.get(mol.getAtom(i).getSymbol())){ 
-			return false;
-		}else{
-			return true;
+		if(mol.getAtom(i).getImplicitHydrogenCount()==null) {
+			if ((getTotalBondOrder(mol,i))>= (int)valences.get(mol.getAtom(i).getSymbol())){ 
+				return false;
+			}else{
+				return true;
+			}
+		}else {
+			if ((mol.getAtom(i).getImplicitHydrogenCount()+getTotalBondOrder(mol,i))>= (int)valences.get(mol.getAtom(i).getSymbol())){ 
+				return false;
+			}else{
+				return true;
+			}
 		}
 	}
 	
@@ -584,6 +755,7 @@ public class Generator {
 		}
 		return check;
 	}
+	
 	
 	/**
 	 * Checks whether the atom container has any saturated substructures.
@@ -644,34 +816,22 @@ public class Generator {
 	}
 	
 	/**
-	 * Molecule Generation Functions
+	 * To check connectivity of a saturated molecule before writing it to the output file.
+	 * @param mol IAtomContainer 
+	 * @return
 	 */
+	
+	public static boolean connectivityCheck(IAtomContainer mol) {
+		boolean check=false;
+		if(ConnectivityChecker.partitionIntoMolecules(mol).getAtomContainerCount() == 1) {
+			check=true;
+		}
+		return check;
+	}
 	
 	/**
-	 * 
-	 * Detecting the target atom to add a bond between the chosen index and
-	 * the others.
-	 *
-	 * @param ec equivalence classes
-	 * @param key class key
-	 * @param index atom index
-	 * @return int target atom index
+	 * Molecule Generation Functions
 	 */
-	
-	public static int targetAtom(ListMultimap<String, Integer> ec, String key, int index) {
-		int target=0;
-		List<Integer> indices=ec.get(key);
-		if(indices.contains(index) && indices.size()>1) { //If size is 1 no need to consider
-			if(indices.indexOf(index)!=indices.size()-1) {
-				target+= indices.get(indices.indexOf(index)+1);
-			}else if(indices.indexOf(index)==indices.size()-1) {
-				target+= indices.get(indices.indexOf(index)-1);
-			}
-		}else {
-			target+= indices.get(0);
-		}
-		return target;
-	}
 	
 	/**
 	 * The function add a bond between two atoms or increase the bond order.
@@ -685,11 +845,19 @@ public class Generator {
 	
 	public static void bondAdder(IAtomContainer mol, int index, int target)throws CloneNotSupportedException, CDKException, IOException {
 		IBond add = mol.getBond(mol.getAtom(index), mol.getAtom(target)); 
+		Order ord=null;
 		if(add == null){ 					
 			mol.addBond(index, target, IBond.Order.SINGLE);
 		}
 		else{
-			BondManipulator.increaseBondOrder(add); 
+			ord = add.getOrder();
+			if(ord == IBond.Order.SINGLE){
+				mol.getBond(mol.getAtom(index), mol.getAtom(target)).setOrder(IBond.Order.DOUBLE);
+			}
+			else if(ord == IBond.Order.DOUBLE){
+				mol.getBond(mol.getAtom(index), mol.getAtom(target)).setOrder(IBond.Order.TRIPLE);
+			}
+			//BondManipulator.increaseBondOrder(add); 
 		}
 	}
 	
@@ -710,46 +878,28 @@ public class Generator {
 	}
 	
 	/**
-	 * Finding class of the atom index.
-	 * @param classes equivalence classes
-	 * @param index atom index
-	 * @return String the class key of the index.
-	 */
-	
-	public static String findClass(ListMultimap<String,Integer> classes, int index) {
-		String output="";
-		for(String key:classes.keys()) {
-			if(classes.get(key).contains(index)) {
-				output+=key;
-				break;
-			}
-		}
-		return output;
-	}
-	
-	/**
-	 * Interacting the atom with only one atoms from each equivalence classes.
-	 * @param mol atom container
-	 * @param ec equivalence classes
-	 * @param index atom index
-	 * @param mols list of molecules
-	 * @return List<IAtomContainer> list of atom containers
+	 * For some cases, there was the bonds with order 4. To avoid that we need the function.
+	 * @param mol IAtomContainer 
+	 * @param index atom to saturate
+	 * @param target atom to interact with
+	 * @return
 	 * @throws CloneNotSupportedException
 	 * @throws CDKException
 	 * @throws IOException
 	 */
 	
-	public static  List<IAtomContainer> atomExtensionOnce(IAtomContainer mol,ListMultimap<String, Integer> ec, int index,List<IAtomContainer> mols) throws CloneNotSupportedException, CDKException, IOException { 	
-		for(String key:ec.keySet()) {
-			int target=targetAtom(ec,key,index);
-			if(index!=target && saturationChecker(mol,index) && saturationChecker(mol,target)){ 
-				bondAdder(mol,index,target);
-				IAtomContainer mol2=mol.clone();
-				mols.add(mol2);
-				removeBond(mol,index,target);
+	public static boolean fourth(IAtomContainer mol, int index, int target) throws CloneNotSupportedException, CDKException, IOException {
+		boolean check=true;
+		if(saturationChecker(mol,target)) {
+			IBond bond=mol.getBond(mol.getAtom(index), mol.getAtom(target));
+			if(bond!=null) {
+				int ord=bond.getOrder().numeric();
+				if(ord==3) {
+					check=false;
+				}
 			}
 		}
-		return mols;
+		return check;
 	}
 	
 	/**
@@ -764,28 +914,32 @@ public class Generator {
 	 * @throws IOException
 	 */
 	
-	public static List<IAtomContainer> atomExtensionAll(IAtomContainer mol, ListMultimap<String, Integer> ec, int index,List<IAtomContainer> mols) throws CloneNotSupportedException, CDKException, IOException { 	
+	public static Set<IAtomContainer> atomExtensionAll(IAtomContainer mol, ListMultimap<String, Integer> ec, int index,List<Integer> indices,Set<IAtomContainer> mols) throws CloneNotSupportedException, CDKException, IOException { 	
 		for(String key:ec.keySet()) {
 			List<Integer> l=ec.get(key);
 			for(Integer i:l) {
 				if(index!=i && saturationChecker(mol,index) && saturationChecker(mol,i)){ 
-					bondAdder(mol,index,i);
-					IAtomContainer mol2=mol.clone();
-					mols.add(mol2);
-					removeBond(mol,index,i);
+					if(fourth(mol,index,i)) { // Just bond adder creates problem. even bonds with order 4.
+						bondAdder(mol,index,i);
+						IAtomContainer mol2=mol.clone();
+						mols.add(mol2);
+						removeBond(mol,index,i);
+					}
 				}
 			}
-		}	
+		}
 		return mols;
 	}
 	 
-	 /**
-	  * CNI is the isomoprhism checking method explained in the article.
-	  * @param ec equivalence classes.
-	  * @param eClass an equivalence class
-	  * @param mol atom container
-	  * @return boolean true if the CNI conditions are satisfied.
-	  */
+	//TODO: Currently we dont use CNI. For some test cases we miss some structures. 
+	 
+	/**
+	 * CNI is the isomoprhism checking method explained in the article.
+	 * @param ec equivalence classes.
+	 * @param eClass an equivalence class
+	 * @param mol atom container
+	 * @return boolean true if the CNI conditions are satisfied.
+	 */
 		
 	public static boolean CNI(ListMultimap<String, Integer> ec, List<Integer> eClass, IAtomContainer mol) {
 		boolean check=true;
@@ -804,111 +958,104 @@ public class Generator {
 		}
 		return check;
 	}
-	 
-	 /**
-	  * Extension of atom interactions for the given atom in the atom container.
-	  * @param mol atom container
-	  * @param ec equivalence classes
-	  * @param indices equivalence class members
-	  * @param index atom index
-	  * @param mols list of molecules
-	  * @return List<IAtomContainer> list of atom containers
-	  * @throws CloneNotSupportedException
-	  * @throws CDKException
-	  * @throws IOException
-	  */
-		
-	public static List<IAtomContainer> atomExtension(IAtomContainer mol, ListMultimap<String, Integer> ec,List<Integer> indices, int index,List<IAtomContainer> mols) throws CloneNotSupportedException, CDKException, IOException { 		
-		if(CNI(ec,indices,mol)) {
-			mols=atomExtensionOnce(mol,ec,index,mols);
+			
+	/**
+	 * Equivalence classes based atom saturation function.
+	 * @param mol IAtomContainer 
+	 * @param index atom index to saturate
+	 * @param satList the list of saturated molecules. - in which the atom is saturated.
+	 * @param indices indices from a equivalence class.
+	 * @return
+	 * @throws CloneNotSupportedException
+	 * @throws CDKException
+	 * @throws IOException
+	 */
+	
+	public static List<IAtomContainer> atomSaturation(IAtomContainer mol,int index, List<IAtomContainer> satList,List<Integer> indices) throws CloneNotSupportedException, CDKException, IOException {
+		/**
+		 * If there is an interaction between the elements in the same class
+		 * then the index, atom, would be already saturated. If we dont check,
+		 * and add it to the list, this algorithm will return nothing. 
+		 */
+		if(!saturationChecker(mol,index)) { 
+			satList.add(mol);
 		}else {
-			mols=atomExtensionAll(mol,ec,index,mols);
-		}	
-		return mols;
+			Set<IAtomContainer> mols= new HashSet<IAtomContainer>();
+			ListMultimap<String, Integer> ec= equivalenceClass(mol);
+			mols=atomExtensionAll(mol,ec,index,indices,mols);
+			for(IAtomContainer ac:mols) {
+				if(saturationChecker(ac,index)) {
+					satList=atomSaturation(ac,index,satList,indices);
+				}else if(!saturationChecker(ac,index)) {
+					String inchi= inchiGeneration(ac);
+					if(!atomSatInchiCheck.contains(inchi)) {
+						atomSatInchiCheck.add(inchi);
+						satList.add(ac);
+					}
+				}
+			}
+		}
+	    return satList;
 	}
 	
-	 /**
-	  * Saturating atom in the atom container
-	  * @param mol atom container
-	  * @param index atom index
-	  * @param satList List of molecule, in which the atom is saturated. 
-	  * @return List<IAtomContainer> list of atom containers in which the atom is saturated.
-	  * @throws CloneNotSupportedException
-	  * @throws CDKException
-	  * @throws IOException
-	  */
-		
-	public static List<IAtomContainer> atomSaturation(IAtomContainer mol,int index, List<IAtomContainer> satList) throws CloneNotSupportedException, CDKException, IOException {
-		List<IAtomContainer> mols= new ArrayList<IAtomContainer>();
-		ListMultimap<String, Integer> ec= equivalenceClasses(mol);
-		List<Integer> indices= ec.get(findClass(ec, index));
-		mols=atomExtension(mol,ec,indices,index,mols);
-	    for(IAtomContainer ac:mols) {
-	    	if(saturationChecker(ac,index)) {
-	    		satList=atomSaturation(ac,index,satList);
-	        }else if(!saturationChecker(ac,index)) {
-	        	satList.add(ac);
-	        }
-	     }
-	     return satList;
-	}
+	/**
+	 * Equivalence classes based classSat function
+	 * @param mol
+	 * @param indices
+	 * @param satList
+	 * @return
+	 * @throws CloneNotSupportedException
+	 * @throws CDKException
+	 * @throws IOException
+	 */
 	
-	 /**
-	  * Saturating an equivalence class.
-	  * @param mol atom container
-	  * @param indices an equivalence class
-	  * @param satList list of saturated molecules, for the list of indices.
-	  * @return List<IAtomContainer> list of saturated molecules, for the list of indices.
-	  * @throws CloneNotSupportedException
-	  * @throws CDKException
-	  * @throws IOException
-	  */
-	 
 	public static List<IAtomContainer> classSat(IAtomContainer mol, List<Integer> indices, List<IAtomContainer> satList) throws CloneNotSupportedException, CDKException, IOException{
 		if(indices.size()==0) {
 			satList.add(mol);
 		}else {
-			int ind= (Integer)indices.get(0);
+			int ind = (Integer)indices.get(0);
 			List<Integer> newList= updateList(indices,ind);
 			List<IAtomContainer> atomSatList = new ArrayList<IAtomContainer>();
-			atomSatList=atomSaturation(mol,ind, atomSatList);
+			atomSatList=atomSaturation(mol,ind, atomSatList,newList);
 			for(IAtomContainer ac: atomSatList) {
-				//if(!subSaturation(ac)) { 
-					satList=classSat(ac,newList,satList);
-				//}
+				String inchi=inchiGeneration(ac);				
+				if(!classInchiCheck.contains(inchi)) {
+					classInchiCheck.add(inchi);
+					satList=classSat(ac,openSites(ac,newList),satList); //open sites need to be updated maybe.
+				}
 			}
 		}
 		return satList;
 	}
 	
-	 /**
-	  * To start the generation process, first, by generating the equivalence classes.
-	  * @param mol atom container
-	  * @param outFile SDF output file
-	  * @param list list of atom containers
-	  * @return List<IAtomContainer> list of generated structures
-	  * @throws CloneNotSupportedException
-	  * @throws CDKException
-	  * @throws IOException
-	  */
-		
+	/**
+	 * Equivalence classes based run function
+	 * @param mol
+	 * @param outFile
+	 * @param list
+	 * @return
+	 * @throws CloneNotSupportedException
+	 * @throws CDKException
+	 * @throws IOException
+	 */
+	
 	public static List<IAtomContainer> run( IAtomContainer mol, SDFWriter outFile, List<IAtomContainer> list) throws CloneNotSupportedException, CDKException, IOException {
 		saturation = new SaturationChecker();
-		if(saturation.allSaturated(mol)) {
-			if(signatureCheck.add(moleculeSignature(mol))) {
+		if(saturation.allSaturated(mol) && connectivityCheck(mol)) {
+			String inchi=inchiGeneration(mol);
+			if(!inchiCheck.contains(inchi)) {
+				inchiCheck.add(inchi);
 				list.add(mol);
 				outFile.write(mol);
 			}
 		}else {
-			ListMultimap<String, Integer> m=equivalenceClasses(mol);
+			ListMultimap<String, Integer> m=equivalenceClass(mol); 
 			for(String k:m.keySet()) {
-				List<Integer> l= m.get(k);
+				List<Integer> l= m.get(k); 
 				List<IAtomContainer> sat= new ArrayList<IAtomContainer>();
 				sat=classSat(mol,l,sat);
 				for(IAtomContainer a: sat) {
-					if(!subSaturation(a)) {
-						list=run(a,outFile,list);
-					}
+					list=run(a,outFile,list);
 				}
 			}
 		}
@@ -924,11 +1071,11 @@ public class Generator {
 	 * @throws IOException
 	 */
 	 
-	public static void HMD(String molInfo, String fileDirectory) throws CloneNotSupportedException, CDKException, IOException {
+	public static void EQGen(String molInfo, String fileDirectory) throws CloneNotSupportedException, CDKException, IOException {
 		long startTime = System.nanoTime(); //Recording the duration time.
-		SDFWriter outFile = new SDFWriter(new FileWriter(filedir+"output.sdf"));
+		SDFWriter outFile = new SDFWriter(new FileWriter(filedir+".sdf"));
 		List<IAtomContainer> mols= new ArrayList<IAtomContainer>();
-		IAtomContainer mol=build(molinfo);
+		IAtomContainer mol = build(molinfo); //The order of the molinfo for hydrogen dis. change the result.
 		if(verbose) {
 			System.out.println("Input molecule is built and its image is stored in the given directory.");
 		}
@@ -1003,53 +1150,15 @@ public class Generator {
 	}
 	
 	public static void main(String[] args) throws CloneNotSupportedException, CDKException, IOException  {		
-		int[] entries= new int [3];
-		entries[0]=4;
-		entries[1]=2;
-		entries[2]=3;
-		truncatedTabloids(entries);
-		/**Generator gen = null;
-		String[] args1= {"-i","C3C3C2C2C1C1","-v","-d","C:\\Users\\mehme\\Desktop\\" };
+		Generator gen = null;
+		//O1CC1C1C1C1CO1 C6H6O2 Example formula
+		//String[] args1= {"-i","C1C1C1C1C1C1","-v","-d","C:\\Users\\mehme\\Desktop\\output\\ben" };
 		try {
 			gen = new Generator();
-			gen.parseArgs(args1);
-			Generator.HMD(Generator.molinfo, Generator.filedir);
+			gen.parseArgs(args);
+			Generator.EQGen(Generator.molinfo, Generator.filedir);
 		} catch (Exception e) {
 			if (Generator.verbose) e.getCause(); 
 		}
-		List<int[]> list= new ArrayList<int[]>();
-		int[] array= new int[0];
-		truncatedTabloids(4,array,list);
-		for(int[] a: list) {
-			System.out.println(Arrays.toString(a));
-		}
-		ArrayList<Permutation> R= new ArrayList<Permutation>();
-	    Permutation perm1 = new Permutation(3,2,1,0,7,6,5,4);
-	    Permutation perm2 = new Permutation(0,1,2,3,4,5,6,7);
-	    Permutation perm3 = new Permutation(4,5,6,7,0,1,2,3);
-	    Permutation perm4 = new Permutation(7,6,5,4,3,2,1,0);
-	    R.add(perm1);
-	    R.add(perm2);
-	    R.add(perm3);
-	    R.add(perm4);
-	     
-	    PermutationGroup s8= PermutationGroup.makeSymN(8);
-	     
-	    ArrayList<Permutation> gen= new ArrayList<Permutation>();
-	     
-	    Permutation gen1= new Permutation(1,2,3,0,4,5,6,7);
-	    Permutation gen2= new Permutation(1,0,2,3,4,5,6,7);
-	    Permutation gen3= new Permutation(0,1,2,3,5,6,7,4);
-	    Permutation gen4= new Permutation(0,1,2,3,5,4,6,7);
-	    gen.add(gen1);
-	    gen.add(gen2);
-	    gen.add(gen3);
-	    gen.add(gen4);
-	     
-	     
-	    PermutationGroup s4s4=generateGroup(gen);
-	    System.out.println(fundamentalLemma(s8,s4s4,4,R).size());
-	    **/
-
 	}
 }
